@@ -39,6 +39,67 @@ using namespace std;
 // Define alias
 typedef vector< vector<double> > matrix; //this one is supported, not the using matrix=...
 
+// This function takes the compressed diagonal storage and returns the full matrix.
+matrix reconstruct_from_diag(const matrix& diag, const vec& ioff, int n) {
+    matrix A(n, vec(n, 0.0)); // Initialize n x n matrix with zeros
+
+    if (diag.empty() || ioff.empty() || diag[0].size() != ioff.size()) {
+        throw runtime_error("DIAG and IOFF dimensions are incompatible.");
+    }
+    if (diag.size() != n) {
+         throw runtime_error("Number of rows in DIAG must match the matrix size n.");
+    }
+
+    int num_diagonals = ioff.size();
+
+    // Loop through each column of DIAG, which represents a diagonal in A
+    for (int j = 0; j < num_diagonals; ++j) {
+        int offset = ioff[j];
+        // Loop through each element in that column
+        for (int i = 0; i < n; ++i) {
+            int target_row = i;
+            int target_col = i + offset;
+
+            // Place the element if it's within the matrix bounds
+            if (target_row >= 0 && target_row < n && target_col >= 0 && target_col < n) {
+                A[target_row][target_col] = diag[i][j];
+            }
+        }
+    }
+    return A;
+}
+
+// --- NEW: Helper function to get DIAG/IOFF input from the user ---
+// This function prompts the user for the sparse matrix data.
+matrix get_A_from_diag_input() {
+    int n;
+    cout << "Enter the size (n x n) of the full matrix A: ";
+    cin >> n;
+
+    int num_diags;
+    cout << "Enter the number of diagonals (size of IOFF vector): ";
+    cin >> num_diags;
+
+    vec ioff(num_diags);
+    cout << "Enter the elements of the IOFF vector (e.g., -1 0 1 2): ";
+    for(int i = 0; i < num_diags; ++i) {
+        cin >> ioff[i];
+    }
+
+    matrix diag(n, vec(num_diags));
+    cout << "Enter the " << n << "x" << num_diags << " DIAG matrix row by row." << endl;
+    cout << "NOTE: For positions with '*', you can enter 0 or any number, it will be ignored." << endl;
+    for (int i = 0; i < n; ++i) {
+        cout << "Row " << i + 1 << ": ";
+        for (int j = 0; j < num_diags; ++j) {
+            cin >> diag[i][j];
+        }
+    }
+
+    cout << "\nReconstructing full matrix A..." << endl;
+    matrix A = reconstruct_from_diag(diag, ioff, n);
+    return A;
+}
 matrix make_mat(int r1, int c1) {
     matrix a(r1, vector<double>(c1, 0));
     cout << "Enter the elements:\n";
