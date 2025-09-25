@@ -22,20 +22,46 @@ int main(){
 
     // ---- Read Matrix and Vector from files ----
     // The previous code generated these files.
-    int r1,c1;
-    cout<<"enter the A matrix dimensions\n";
-    cin>>r1>>c1;
-    matrix A(r1, vec(c1));
-    vec b(r1);
-    vec x(c1);
+    //IOFF START
+    matrix A;
+    vec b;
+    vec x;
+    int n;
 
-    A=make_mat(r1,c1);
-    // // read_matrix("includes/Kmat.txt", A);
-    // // read_vector("includes/Fvec.txt", b);
-    cout<<"enter the b matrix dimension\n";
-    int r2;
-    cin>>r2;
-    b=make_vec(r2);
+    // --- Get matrix A from DIAGONAL storage format ---
+    cout << "--- Matrix Reconstruction from Diagonal Storage ---" << endl;
+    A = get_A_from_diag_input();
+    n = A.size(); // Get the size from the reconstructed matrix
+
+    cout << "\nReconstructed Matrix A:" << endl;
+    print_mat(A);
+
+    // --- Get the b vector from the user ---
+    b.resize(n);
+    x.resize(n);
+    cout<<"\n---- Input " << n << " b vector elements ----\n";
+    for(int i=0; i<n; ++i) {
+    cin >> b[i];
+    }
+    int r1=n,c1=n;
+    //IOFF END
+
+    //GENERAL START
+    // int r1,c1;
+    // cout<<"enter the A matrix dimensions\n";
+    // cin>>r1>>c1;
+    // matrix A(r1, vec(c1));
+    // vec b(r1);
+    // vec x(c1);
+
+    // A=make_mat(r1,c1);
+    // // // read_matrix("includes/Kmat.txt", A);
+    // // // read_vector("includes/Fvec.txt", b);
+    // cout<<"enter the b matrix dimension\n";
+    // int r2;
+    // cin>>r2;
+    // b=make_vec(r2);
+    //GENERAL END
     // // ---- Set Solver Parameters ----
     double tolerance = 1e-9;
     int max_iterations = 20000;
