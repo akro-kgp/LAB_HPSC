@@ -671,3 +671,60 @@ int solve_conjugate_gradient(const matrix& A, const vec& b, vec& x, double tol, 
     vec_print(x);    
     return max_iter;
 }
+
+
+//TDMA
+// Thomas algorithm (TDMA) solver for a tridiagonal matrix A.
+// Assumes A is n x n and tridiagonal (only A[i][i-1], A[i][i], A[i][i+1] are used).
+// Input:  A (full matrix but only tridiagonal entries are used), b (RHS)
+// Output: x (solution vector, resized to n)
+// Return: 0 on success, throws runtime_error on invalid input or zero pivot.
+int solve_tdma(const matrix& A, const vec& b, vec& x) {
+    int n = A.size();
+    if (n == 0) throw runtime_error("Empty matrix A in TDMA.");
+    if ((int)A[0].size() != n) throw runtime_error("Matrix A must be square.");
+    if ((int)b.size() != n) throw runtime_error("Vector b size must match A.");
+
+    // Handle trivial case n == 1
+    if (n == 1) {
+        if (fabs(A[0][0]) < 1e-18) throw runtime_error("Zero pivot detected in TDMA (n==1).");
+        x.assign(1, b[0] / A[0][0]);
+        cout << "solution:-----\n"; vec_print(x);
+        return 0;
+    }
+
+    x.assign(n, 0.0);
+    vec cprime(n, 0.0); // modified super-diagonal coefficients
+    vec dprime(n, 0.0); // modified RHS
+
+    // First row
+    double a00 = A[0][0];
+    if (fabs(a00) < 1e-18) throw runtime_error("Zero pivot detected in TDMA at row 0.");
+    cprime[0] = A[0][1] / a00;           // c_0' = c0 / b0
+    dprime[0] = b[0] / a00;              // d_0' = d0 / b0
+
+    // Forward elimination
+    for (int i = 1; i < n; ++i) {
+        double ai_im1 = A[i][i-1];      // a_i (sub-diagonal)
+        double ai_i   = A[i][i];        // b_i (diagonal)
+        double denom  = ai_i - ai_im1 * cprime[i-1];
+        if (fabs(denom) < 1e-18) {
+            throw runtime_error("Zero pivot detected in TDMA during forward elimination at row " + to_string(i));
+        }
+        // Only set cprime for rows that have a super-diagonal (i < n-1)
+        if (i < n - 1) {
+            cprime[i] = A[i][i+1] / denom;  // c_i' = c_i / (b_i - a_i * c_{i-1}')
+        }
+        dprime[i] = (b[i] - ai_im1 * dprime[i-1]) / denom; // d_i' = (d_i - a_i * d_{i-1}') / (b_i - a_i * c_{i-1}')
+    }
+
+    // Back substitution
+    x[n-1] = dprime[n-1];
+    for (int i = n - 2; i >= 0; --i) {
+        x[i] = dprime[i] - cprime[i] * x[i+1];
+    }
+
+    cout << "solution:-----\n";
+    vec_print(x);
+    return 0;
+}
