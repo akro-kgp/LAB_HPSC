@@ -1,7 +1,7 @@
 import numpy as np
 
 # Load the iteration matrix from the file created by your C program
-T = np.loadtxt(r'C:\Users\Chiradip Biswas\Desktop\kgp\7thSem\high performance computing\lab_class2\matrix.txt')
+T = np.loadtxt(r'D:\4th year\7th sem\Hpss\LAB_HPSC\matrix.txt')
 
 print("Matrix T:\n", T)
 #with open(r'C:\Users\Chiradip Biswas\Desktop\kgp\7thSem\high performance computing\lab_class2\matrix.txt', 'r') as f:

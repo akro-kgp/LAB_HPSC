@@ -728,3 +728,142 @@ int solve_tdma(const matrix& A, const vec& b, vec& x) {
     vec_print(x);
     return 0;
 }
+// Restarted GMRES (uses arnoldi_iteration already in your library)
+// A : matrix (n x n)
+// b : RHS (n)
+// x : initial guess (n) and on exit contains the approximate solution
+// restart : m (dimension of Krylov subspace before restart)
+// tol : tolerance for residual norm
+// max_iter : maximum number of outer iterations * restart (total mat-vec ops approx)
+// Returns: number of Arnoldi steps performed (or max_iter if not converged)
+int solve_gmres(const matrix& A, const vec& b, vec& x, int restart, double tol, int max_iter) {
+    int n = A.size();
+    if (n == 0) return 0;
+    if ((int)A[0].size() != n) throw runtime_error("Matrix A must be square in GMRES.");
+    if ((int)b.size() != n || (int)x.size() != n) throw runtime_error("Dimension mismatch in GMRES.");
+
+    int total_steps = 0;
+    int max_outer = std::max(1, (max_iter + restart - 1) / restart);
+
+    for (int outer = 0; outer < max_outer; ++outer) {
+        // 1) compute residual r0 = b - A*x, beta = ||r0||
+        vec r0 = vec_sub(b, mat_vec_mul(A, x));
+        double beta = vec_norm(r0);
+        if (beta < tol) {
+            cout << "solution:-----\n";
+            vec_print(x);
+            return total_steps;
+        }
+
+        // Build v1 = r0 / beta
+        vec v1 = scalar_vec_mul(1.0 / beta, r0);
+
+        // 2) Arnoldi to build V (n x (m+1)) and H ((m+1) x m)
+        matrix V;
+        matrix H;
+        int actual_m = 0;
+        arnoldi_iteration(A, restart, v1, V, H, actual_m);
+        // arnoldi_iteration returns V as n x (actual_m+1) and H as (actual_m+1) x actual_m
+        total_steps += actual_m;
+
+        // 3) Form beta*e1 (size actual_m+1)
+        vec beta_e1(actual_m + 1, 0.0);
+        beta_e1[0] = beta;
+
+        // 4) Solve least squares min || beta_e1 - H * y || by normal equations:
+        //    (H^T H) y = H^T (beta_e1)
+        int m = actual_m;
+        if (m == 0) { // No Krylov vectors generated (rare), treat as stagnation
+            break;
+        }
+
+        // Compute HtH (m x m) and rhs (m)
+        matrix HtH(m, vec(m, 0.0));
+        vec rhs(m, 0.0);
+
+        // H is (m+1) x m: H[i][j] (i=0..m, j=0..m-1)
+        // HtH[p][q] = sum_{i=0..m} H[i][p] * H[i][q]
+        for (int p = 0; p < m; ++p) {
+            for (int q = 0; q < m; ++q) {
+                double sum = 0.0;
+                for (int i = 0; i <= m; ++i) sum += H[i][p] * H[i][q];
+                HtH[p][q] = sum;
+            }
+        }
+        // rhs[p] = sum_{i=0..m} H[i][p] * (beta_e1[i])
+        for (int p = 0; p < m; ++p) {
+            double sum = 0.0;
+            for (int i = 0; i <= m; ++i) sum += H[i][p] * beta_e1[i];
+            rhs[p] = sum;
+        }
+
+        // 5) Solve HtH * y = rhs (dense small system) by Gaussian elimination w/ partial pivoting
+        auto solve_dense = [&](matrix M, vec bvec)->vec {
+            int N = M.size();
+            if ((int)M[0].size() != N) throw runtime_error("solve_dense: need square matrix");
+            vec xsol(N, 0.0);
+
+            // forward elimination with partial pivoting
+            for (int k = 0; k < N; ++k) {
+                // pivot
+                int piv = k;
+                double maxv = fabs(M[k][k]);
+                for (int i = k+1; i < N; ++i) {
+                    double av = fabs(M[i][k]);
+                    if (av > maxv) { maxv = av; piv = i; }
+                }
+                if (maxv < 1e-18) throw runtime_error("Singular or ill-conditioned small system in GMRES solve.");
+                if (piv != k) {
+                    swap(M[k], M[piv]);
+                    swap(bvec[k], bvec[piv]);
+                }
+                // eliminate
+                for (int i = k+1; i < N; ++i) {
+                    double fac = M[i][k] / M[k][k];
+                    for (int j = k; j < N; ++j) M[i][j] -= fac * M[k][j];
+                    bvec[i] -= fac * bvec[k];
+                }
+            }
+            // back substitution
+            for (int i = N-1; i >= 0; --i) {
+                double s = bvec[i];
+                for (int j = i+1; j < N; ++j) s -= M[i][j] * xsol[j];
+                xsol[i] = s / M[i][i];
+            }
+            return xsol;
+        };
+
+        vec y;
+        try {
+            y = solve_dense(HtH, rhs);
+        } catch (const exception& e) {
+            // If solving normal equations fails, fall back to trivial break (stagnation)
+            cerr << "GMRES: small system solve failed: " << e.what() << "\n";
+            break;
+        }
+
+        // 6) Update x = x + V_m * y  (V has n x (m+1) columns, use first m cols)
+        for (int j = 0; j < m; ++j) {
+            // extract v_j
+            vec vj(n);
+            for (int i = 0; i < n; ++i) vj[i] = V[i][j];
+            x = vec_add(x, scalar_vec_mul(y[j], vj));
+        }
+
+        // 7) Check convergence: compute new residual
+        r0 = vec_sub(b, mat_vec_mul(A, x));
+        beta = vec_norm(r0);
+        if (beta < tol) {
+            cout << "solution:-----\n";
+            vec_print(x);
+            return total_steps;
+        }
+
+        // continue with next restart
+    }
+
+    // finished (max iter reached)
+    cout << "solution:-----\n";
+    vec_print(x);
+    return total_steps;
+}
