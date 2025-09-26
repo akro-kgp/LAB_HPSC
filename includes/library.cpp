@@ -867,3 +867,86 @@ int solve_gmres(const matrix& A, const vec& b, vec& x, int restart, double tol, 
     vec_print(x);
     return total_steps;
 }
+
+//iteration matrix for gauss seidal and sor iteration
+matrix solve_lower_triangular_system(const matrix& L, const matrix& B) {
+    int n = L.size();
+    if (n == 0) return matrix();
+    int m = B[0].size();
+    // dimension checks
+    if ((int)L[0].size() != n) throw runtime_error("L must be square in solve_lower_triangular_system.");
+    if ((int)B.size() != n) throw runtime_error("B row count must equal L size.");
+
+    matrix X(n, vec(m, 0.0));
+    for (int col = 0; col < m; ++col) {
+        for (int i = 0; i < n; ++i) {
+            double sum = 0.0;
+            for (int j = 0; j < i; ++j) sum += L[i][j] * X[j][col];
+            double diag = L[i][i];
+            if (fabs(diag) < 1e-18) throw runtime_error("Zero diagonal in lower-triangular matrix.");
+            X[i][col] = (B[i][col] - sum) / diag;
+        }
+    }
+    return X;
+}
+
+// Build Gauss-Seidel iteration matrix G_GS = -(D+L)^{-1} * U
+matrix get_gs_iteration_matrix(const matrix& A) {
+    int n = A.size();
+    if (n == 0) return matrix();
+    if ((int)A[0].size() != n) throw runtime_error("Matrix A must be square.");
+
+    // Build M = D + L (lower triangular)
+    matrix M(n, vec(n, 0.0));
+    matrix U(n, vec(n, 0.0));
+    for (int i = 0; i < n; ++i) {
+        for (int j = 0; j < n; ++j) {
+            if (i > j) M[i][j] = A[i][j];     // lower strict
+            else if (i == j) M[i][j] = A[i][j]; // diagonal
+            else U[i][j] = A[i][j];           // upper strict
+        }
+    }
+
+    // RHS = -U (n x n)
+    matrix RHS(n, vec(n, 0.0));
+    for (int i = 0; i < n; ++i)
+        for (int j = 0; j < n; ++j)
+            RHS[i][j] = -U[i][j];
+
+    // Solve (D+L) * G = -U  =>  G = (D+L)^{-1} * (-U)
+    matrix G = solve_lower_triangular_system(M, RHS);
+    return G;
+}
+
+// Build SOR iteration matrix G_omega = (D + ω L)^{-1} [ (1-ω) D - ω U ]
+matrix get_sor_iteration_matrix(const matrix& A, double omega) {
+    int n = A.size();
+    if (n == 0) return matrix();
+    if ((int)A[0].size() != n) throw runtime_error("Matrix A must be square.");
+
+    // Build M = D + omega * L  (lower triangular)
+    matrix M(n, vec(n, 0.0));
+    matrix U(n, vec(n, 0.0));
+    for (int i = 0; i < n; ++i) {
+        for (int j = 0; j < n; ++j) {
+            if (i > j) M[i][j] = omega * A[i][j]; // omega * (strict lower)
+            else if (i == j) M[i][j] = A[i][j];   // diagonal
+            else U[i][j] = A[i][j];               // strict upper
+        }
+    }
+
+    // Build RHS = (1-omega) * D - omega * U
+    matrix RHS(n, vec(n, 0.0));
+    for (int i = 0; i < n; ++i) {
+        // diagonal term
+        RHS[i][i] = (1.0 - omega) * A[i][i];
+        // upper terms
+        for (int j = i+1; j < n; ++j) {
+            RHS[i][j] = -omega * A[i][j];
+        }
+    }
+
+    // Solve (D + omega L) * G = RHS  =>  G = (D + omega L)^{-1} * RHS
+    matrix G = solve_lower_triangular_system(M, RHS);
+    return G;
+}
